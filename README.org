@@ -1,0 +1,91 @@
+#+title: =refbox-org-slipbox=
+#+author: Ayan Das
+#+language: en
+
+=refbox-org-slipbox= connects =refbox= bibliography entries to
+=org-slipbox= notes.  It registers an optional Refbox note source backed by
+org-slipbox's indexed ref and capture APIs, so reference-note lookup stays on
+the org-slipbox daemon path instead of scanning Org files from Emacs.
+
+* Overview
+
+The package provides:
+
+- =refbox-org-slipbox-mode= to register the =org-slipbox= note source
+- =refbox-org-slipbox-ref-add= to add the selected Refbox key as an
+  org-slipbox ref on the current node
+- =refbox-org-slipbox-open-current-refs= to open Refbox resources for citation
+  refs attached to the current org-slipbox node
+
+When enabled, Refbox note operations use org-slipbox refs of the form =@KEY=
+by default.  For example, bibliography key =smith2024= maps to the
+org-slipbox ref =@smith2024=.
+
+* Installation
+
+During local development, place the repository on =load-path= next to
+=refbox= and =org-slipbox=.
+
+#+begin_src elisp
+(use-package refbox-org-slipbox
+  :load-path "/path/to/refbox-org-slipbox"
+  :after (refbox org-slipbox)
+  :init
+  (require 'refbox-org-slipbox)
+  :config
+  (refbox-org-slipbox-mode 1))
+#+end_src
+
+The package is deliberately standalone: loading Refbox does not load
+org-slipbox, and loading org-slipbox does not load Refbox.
+
+* Configuration
+
+The default key-to-ref mapping is =@KEY=.  Override it by customizing
+=refbox-org-slipbox-reference-function=.
+
+#+begin_src elisp
+(setq refbox-org-slipbox-reference-function
+      (lambda (key _reference)
+        (format "@%s" key)))
+#+end_src
+
+New note titles are generated from a Refbox template:
+
+#+begin_src elisp
+(setq refbox-org-slipbox-note-title-template
+      "${author editor}, ${title}")
+#+end_src
+
+Capture templates can receive metadata through
+=refbox-org-slipbox-capture-fields=.  The integration always passes:
+
+- =:refbox-key=
+- =:refbox-citekey=
+- =:refbox-reference=
+- =:note-title=
+
+* Performance
+
+Exact note lookup uses org-slipbox's indexed ref search and caches results
+against the org-slipbox database modification time.  Cache invalidation is
+automatic when the database changes, and =refbox-org-slipbox-clear-cache= is
+available for explicit refreshes.
+
+=refbox-open-note= without a selected reference uses
+=refbox-org-slipbox-all-items-limit= because org-slipbox currently exposes
+bounded ref search rather than an unbounded all-ref enumeration RPC.  Normal
+per-reference note indicators, opening, and creation do not depend on that
+bounded global listing.
+
+* Verification
+
+The repository includes the same local check style as related packages:
+
+- =make compile=
+- =make test=
+- =make checkdoc=
+- =make check=
+
+By default, these expect sibling checkouts at =../refbox= and
+=../org-slipbox=.  Override =REFBOX_DIR= or =ORG_SLIPBOX_DIR= when needed.
