@@ -5,7 +5,7 @@
 ;; Author: Ayan Das <bvits@riseup.net>
 ;; Maintainer: Ayan Das <bvits@riseup.net>
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (refbox "0.1.0") (org-slipbox "0.10.0"))
+;; Package-Requires: ((emacs "29.1") (refbox "0.2.0") (org-slipbox "0.10.0"))
 ;; Keywords: outlines, bib, convenience
 ;; URL: https://github.com/b-vitamins/refbox-org-slipbox
 
