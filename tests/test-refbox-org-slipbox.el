@@ -92,6 +92,34 @@
             (should (= calls 2))))
       (delete-file org-slipbox-database-file))))
 
+(ert-deftest refbox-org-slipbox-test-preload_batches_indicator_lookup ()
+  "Preload should avoid one exact org-slipbox RPC per visible candidate."
+  (let ((calls nil)
+        (refbox-org-slipbox-preload-limit 10)
+        (org-slipbox-database-file
+         (make-temp-file "refbox-org-slipbox-db"))
+        (org-slipbox-directory "/tmp/slipbox"))
+    (unwind-protect
+        (progn
+          (refbox-org-slipbox-clear-cache)
+          (cl-letf (((symbol-function 'org-slipbox-rpc-search-refs)
+                     (lambda (query limit)
+                       (push (list query limit) calls)
+                       (should (equal query ""))
+                       (should (= limit 10))
+                       '(:refs [(:reference "@smith2024"
+                                  :node (:node_key "file:smith.org"
+                                         :title "Smith"
+                                         :file_path "smith.org"
+                                         :line 1))]))))
+            (refbox-org-slipbox-preload
+             '((:key "smith2024")
+               (:key "doe2025")))
+            (should (refbox-org-slipbox-has-notes "smith2024" '(:key "smith2024")))
+            (should-not (refbox-org-slipbox-has-notes "doe2025" '(:key "doe2025")))
+            (should (= (length calls) 1))))
+      (delete-file org-slipbox-database-file))))
+
 (ert-deftest refbox-org-slipbox-test-open_note_visits_indexed_node ()
   "Opening a note item should visit the org-slipbox node payload."
   (let ((visited nil)

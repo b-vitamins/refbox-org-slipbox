@@ -99,6 +99,15 @@ reference."
   :type 'integer
   :group 'refbox-org-slipbox)
 
+(defcustom refbox-org-slipbox-preload-limit 10000
+  "Maximum org-slipbox ref records fetched to preload Refbox indicators.
+
+The preload path is used by Refbox completion to avoid one exact ref lookup per
+visible bibliography candidate.  If the org-slipbox ref set exceeds this limit,
+uncached refs still fall back to exact indexed lookup."
+  :type 'integer
+  :group 'refbox-org-slipbox)
+
 (defconst refbox-org-slipbox-source-name 'org-slipbox
   "Refbox note source name used by refbox-org-slipbox.")
 
@@ -107,6 +116,7 @@ reference."
     :items refbox-org-slipbox-note-items
     :all-items refbox-org-slipbox-all-items
     :hasitems refbox-org-slipbox-has-notes
+    :preload refbox-org-slipbox-preload
     :open refbox-org-slipbox-open-note
     :create refbox-org-slipbox-create-note
     :create-label refbox-org-slipbox-create-label
@@ -122,6 +132,9 @@ reference."
 
 (defvar refbox-org-slipbox--note-cache-stamp nil
   "Database stamp corresponding to `refbox-org-slipbox--note-cache'.")
+
+(defvar refbox-org-slipbox--preload-stamp nil
+  "Cache stamp for the latest broad org-slipbox ref preload.")
 
 (defvar refbox-org-slipbox--previous-notes-source nil
   "Refbox note source active before `refbox-org-slipbox-mode' changed it.")
@@ -162,7 +175,8 @@ reference."
   (interactive)
   (setq refbox-org-slipbox--note-cache (make-hash-table :test 'equal)
         refbox-org-slipbox--note-cache-stamp
-        (refbox-org-slipbox--cache-stamp)))
+        (refbox-org-slipbox--cache-stamp)
+        refbox-org-slipbox--preload-stamp nil))
 
 (defun refbox-org-slipbox--cache ()
   "Return the current note lookup cache, resetting it if the DB changed."
@@ -170,7 +184,8 @@ reference."
     (unless (and refbox-org-slipbox--note-cache
                  (equal stamp refbox-org-slipbox--note-cache-stamp))
       (setq refbox-org-slipbox--note-cache (make-hash-table :test 'equal)
-            refbox-org-slipbox--note-cache-stamp stamp))
+            refbox-org-slipbox--note-cache-stamp stamp
+            refbox-org-slipbox--preload-stamp nil))
     refbox-org-slipbox--note-cache))
 
 (defun refbox-org-slipbox--record-reference (record)
@@ -198,6 +213,47 @@ reference."
                  (refbox-org-slipbox--listify
                   (plist-get response :refs)))))
           (puthash org-slipbox-ref records cache))))))
+
+(defun refbox-org-slipbox--cache-records (records)
+  "Merge org-slipbox ref RECORDS into the exact-ref cache."
+  (let ((cache (refbox-org-slipbox--cache)))
+    (dolist (record records)
+      (when-let ((reference (refbox-org-slipbox--record-reference record)))
+        (puthash reference
+                 (cons record
+                       (remove record (gethash reference cache)))
+                 cache)))))
+
+(defun refbox-org-slipbox-preload (references)
+  "Preload note lookup data for Refbox REFERENCES."
+  (let* ((refs (delete-dups
+                (delq nil
+                      (mapcar
+                       (lambda (reference)
+                         (when-let ((key (refbox-reference-field reference "key")))
+                           (refbox-org-slipbox-reference key reference)))
+                       references))))
+         (cache (refbox-org-slipbox--cache))
+         (missing (cl-remove-if
+                   (lambda (reference)
+                     (not (eq (gethash reference cache refbox-org-slipbox--cache-miss)
+                              refbox-org-slipbox--cache-miss)))
+                   refs))
+         (stamp (list (refbox-org-slipbox--cache-stamp)
+                      refbox-org-slipbox-preload-limit)))
+    (when (and missing
+               (not (equal stamp refbox-org-slipbox--preload-stamp)))
+      (let* ((response (org-slipbox-rpc-search-refs
+                        ""
+                        refbox-org-slipbox-preload-limit))
+             (records (refbox-org-slipbox--listify
+                       (plist-get response :refs))))
+        (refbox-org-slipbox--cache-records records)
+        (when (< (length records) refbox-org-slipbox-preload-limit)
+          (dolist (reference refs)
+            (unless (gethash reference cache)
+              (puthash reference nil cache))))
+        (setq refbox-org-slipbox--preload-stamp stamp)))))
 
 (defun refbox-org-slipbox--candidate-for-key (key reference)
   "Return a refbox candidate for KEY and REFERENCE when available."
